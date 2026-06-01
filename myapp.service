@@ -1,0 +1,20 @@
+# This is a "systemd service" file.
+# systemd is the Linux tool that keeps your app running 24/7,
+# restarts it if it crashes, and starts it automatically when EC2 reboots.
+#
+# On the EC2 server you copy this to: /etc/systemd/system/myapp.service
+
+[Unit]
+Description=Gunicorn instance to serve my Flask CI/CD app
+After=network.target
+
+[Service]
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/CI-CD_demo
+Environment="PATH=/home/ubuntu/CI-CD_demo/venv/bin"
+ExecStart=/home/ubuntu/CI-CD_demo/venv/bin/gunicorn -c gunicorn_config.py app:app
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,83 @@
+# =====================================================================
+#  THE CI/CD PIPELINE
+#  This file lives at .github/workflows/deploy.yml
+#  GitHub automatically finds and runs it. This is the whole pipeline.
+# =====================================================================
+
+name: CI-CD Pipeline - Deploy to EC2
+
+# WHEN should this pipeline run?
+# Answer: every time you push code to the "main" branch.
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+
+  # ------------------------------------------------------------------
+  # JOB 1: CI (Continuous Integration)
+  # Goal: prove the new code is GOOD before we let it near the server.
+  # ------------------------------------------------------------------
+  test:
+    name: CI - Build & Test
+    runs-on: ubuntu-latest   # GitHub gives us a free fresh Linux machine
+
+    steps:
+      - name: Get the code
+        uses: actions/checkout@v4
+
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest flake8
+
+      - name: Lint (check code style)
+        run: flake8 . --count --max-line-length=120 --statistics
+
+      - name: Run automated tests
+        run: pytest -v
+
+  # ------------------------------------------------------------------
+  # JOB 2: CD (Continuous Deployment)
+  # Goal: copy the good code onto EC2 and restart the app.
+  # "needs: test" => this ONLY runs if Job 1 fully passed.
+  # ------------------------------------------------------------------
+  deploy:
+    name: CD - Deploy to EC2
+    needs: test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: SSH into EC2 and update the app
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}       # your EC2 public IP (stored as a secret)
+          username: ${{ secrets.EC2_USER }}   # usually "ubuntu"
+          key: ${{ secrets.EC2_SSH_KEY }}     # your private SSH key (stored as a secret)
+          script: |
+            # If the project folder doesn't exist yet, clone it once.
+            if [ ! -d "/home/ubuntu/CI-CD_demo" ]; then
+              git clone https://github.com/Trinetrapandey/CI-CD_demo.git /home/ubuntu/CI-CD_demo
+            fi
+
+            cd /home/ubuntu/CI-CD_demo
+
+            # 1. Pull the newest code
+            git pull origin main
+
+            # 2. Make/refresh a virtual environment and install dependencies
+            python3 -m venv venv
+            source venv/bin/activate
+            pip install --upgrade pip
+            pip install -r requirements.txt
+
+            # 3. Restart the app so the new code goes live
+            sudo systemctl restart myapp
+
+            echo "Deployment finished successfully!"
